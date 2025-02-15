@@ -32,6 +32,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -49,9 +50,14 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import coil.compose.rememberAsyncImagePainter
 import com.anietie.voyatekassessment.R
+import com.anietie.voyatekassessment.domain.model.Category
 import com.anietie.voyatekassessment.domain.model.FoodItem
+import com.anietie.voyatekassessment.domain.model.Tag
+import com.anietie.voyatekassessment.domain.repository.FoodRepository
 import com.anietie.voyatekassessment.presentation.theme.VoyatekAssessmentTheme
 import com.anietie.voyatekassessment.utils.AppUtils.createImageUri
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,27 +66,28 @@ fun AddFoodScreen(
     onFoodAdded: (FoodItem) -> Unit,
     onBackClick: () -> Unit
 ) {
-    // Collect category data from ViewModel (assume it’s a State<List<String>> or Flow)
-    val categoryList by viewModel.categoryList.collectAsState(emptyList())
+    val categoryList by viewModel.categoryList.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    val errorMessage by viewModel.errorMessage.collectAsState()
+    val isSuccess by viewModel.foodAdded.collectAsState()
 
-    // Form states
     var name by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
-//    var tags by remember { mutableStateOf("") }
     var ingredients by remember { mutableStateOf("") }
     var calories by remember { mutableStateOf("") }
-    var selectedCategory by remember { mutableStateOf<String?>(null) }
+    var selectedCategory by remember { mutableStateOf<Category?>(null) }
     var tags by remember { mutableStateOf(listOf<String>()) }
-
-    // Images
     val imageUris = remember { mutableStateListOf<String>() }
 
-    // Check if form is complete
-    val isFormComplete = name.isNotBlank() &&
-            description.isNotBlank() &&
-            calories.isNotBlank() &&
-            selectedCategory != null &&
-            imageUris.isNotEmpty()
+    val isFormComplete = name.isNotBlank() && description.isNotBlank() &&
+            calories.isNotBlank() && selectedCategory != null && imageUris.isNotEmpty()
+
+    if (isSuccess) {
+        LaunchedEffect(Unit) {
+            // Navigate back or show a success message
+            onBackClick()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -100,16 +107,15 @@ fun AddFoodScreen(
         bottomBar = {
             Button(
                 onClick = {
-                    // Construct and pass the FoodItem
                     val food = FoodItem(
-                        categoryId = selectedCategory ?: "",
+                        categoryId = selectedCategory?.id.toString(),
                         name = name,
                         description = description,
                         images = imageUris,
                         tags = tags,
                         calories = calories
                     )
-                    onFoodAdded(food)
+                    viewModel.addFoodItem(food)
                 },
                 shape = RoundedCornerShape(8.dp),
                 enabled = isFormComplete, // Disabled until form is complete
@@ -190,7 +196,7 @@ fun AddFoodScreen(
             // Category Dropdown
             Text("Category", style = MaterialTheme.typography.labelLarge)
             CategoryDropdown(
-                categoryList = categoryList,
+                categoryList = categoryList.map { it },
                 selectedCategory = selectedCategory,
                 onCategorySelected = { selectedCategory = it }
             )
@@ -223,24 +229,7 @@ fun AddFoodScreen(
                     tags = updatedTags
                 }
             )
-//            OutlinedTextField(
-//                value = tags,
-//                onValueChange = { tags = it },
-//                placeholder = {
-//                    Text(
-//                        "Add a tag",
-//                        style = MaterialTheme.typography.labelLarge,
-//                        color = Color.Gray
-//                    )
-//                },
-//                textStyle = MaterialTheme.typography.labelLarge,
-//                modifier = Modifier
-//                    .fillMaxWidth()
-//                    .padding(top = 8.dp)
-//            )
             Text("Press enter once you've typed a tag", style = MaterialTheme.typography.labelLarge, color = Color.Gray)
-
-            // Optionally: Ingredients, etc.
         }
     }
 }
@@ -306,9 +295,9 @@ fun PhotoOptionsRow(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CategoryDropdown(
-    categoryList: List<String>,
-    selectedCategory: String?,
-    onCategorySelected: (String) -> Unit
+    categoryList: List<Category>,
+    selectedCategory: Category?,
+    onCategorySelected: (Category) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
 
@@ -317,7 +306,7 @@ fun CategoryDropdown(
         onExpandedChange = { expanded = !expanded }
     ) {
         OutlinedTextField(
-            value = selectedCategory ?: "",
+            value = selectedCategory?.name ?: "",
             onValueChange = { /* No-op, read-only from dropdown */ },
             readOnly = true,
             trailingIcon = {
@@ -336,7 +325,7 @@ fun CategoryDropdown(
         ) {
             categoryList.forEach { category ->
                 DropdownMenuItem(
-                    text = { Text(category) },
+                    text = { Text(category.name) },
                     onClick = {
                         onCategorySelected(category)
                         expanded = false
@@ -400,9 +389,26 @@ fun ImageThumbnailRow(
 @Preview(showBackground = true)
 @Composable
 fun AddFoodScreenPreview() {
+    val fakeRepository = object : FoodRepository {
+        override fun getAllFoods(): Flow<List<FoodItem>> = flow {
+            emit(
+                listOf(
+                    FoodItem("1", "Pizza", "Delicious cheese pizza", "300", listOf(), listOf("Dinner")),
+                    FoodItem("2", "Burger", "Tasty beef burger", "450", listOf(),  listOf("Lunch"))
+                )
+            )
+        }
+
+        override suspend fun addFood(food: FoodItem) {}
+        override suspend fun removeFood(foodId: String) {}
+        override suspend fun getFoodById(foodId: String): FoodItem? = null
+        override suspend fun updateFood(food: FoodItem) {}
+        override suspend fun getCategories(): List<Category> = emptyList()
+        override suspend fun getTags(): List<Tag> = emptyList()
+    }
     VoyatekAssessmentTheme {
         AddFoodScreen(
-            AddFoodViewModel(),
+            AddFoodViewModel(fakeRepository),
             onFoodAdded = { /* navigate or show details */ },
             onBackClick = { /* navigate back */ }
         )

@@ -43,7 +43,7 @@ fun FoodDetailsScreen(
         ) {
             // Large Image
             val painter = rememberAsyncImagePainter(
-                model = foodItem.images.first() ?: ""
+                model = foodItem.images?.first() ?: ""
             )
             Image(
                 painter = painter,
@@ -65,7 +65,7 @@ fun FoodDetailsScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = foodItem.name,
+                    text = foodItem.name ?: "",
                     style = MaterialTheme.typography.headlineSmall
                 )
                 TextButton(onClick = { onRemoveClick(foodItem) }) {
@@ -75,13 +75,13 @@ fun FoodDetailsScreen(
 
             // Description
             Text(
-                text = foodItem.description,
+                text = foodItem.description ?: "",
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             )
 
             // Tags
-            if (foodItem.tags.isNotEmpty()) {
+            if (foodItem.tags?.isNotEmpty() == true) {
                 Text(
                     text = "Tags: ${foodItem.tags.joinToString(", ")}",
                     style = MaterialTheme.typography.bodySmall,
@@ -90,7 +90,7 @@ fun FoodDetailsScreen(
             }
 
             // Ingredients
-            if (foodItem.calories.isNotEmpty()) {
+            if (foodItem.calories?.isNotEmpty() == true) {
                 Text(
                     text = "Nutrition",
                     style = MaterialTheme.typography.titleMedium,

@@ -3,8 +3,11 @@ package com.anietie.voyatekassessment.presentation.screens.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.anietie.voyatekassessment.domain.model.FoodItem
+import com.anietie.voyatekassessment.domain.repository.FoodRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 
 data class HomeUiState(
@@ -13,40 +16,13 @@ data class HomeUiState(
     val allFoods: List<FoodItem> = emptyList(),
     val searchQuery: String = "",
     val selectedTag: String = "All",
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    val errorMessage: String = ""
 )
 
 class HomeViewModel(
-    // If you have a repository or use case, inject it here, e.g.:
-    // private val repository: FoodRepository
+     private val foodRepository: FoodRepository
 ) : ViewModel() {
-
-    // If you have a sealed class for events, you can use it here, e.g.:
-    // private val _stateEvent = MutableLiveData<HomeStateEvent>()
-    // val stateEvent: LiveData<HomeStateEvent>
-    //     get() = _stateEvent
-
-    // fun setStateEvent(event: HomeStateEvent){
-    //     _stateEvent.value = event
-    // }
-
-    // fun getFoodItems(){
-    //     viewModelScope.launch {
-    //         repository.getFoodItems().collect { dataState ->
-    //             when(dataState){
-    //                 is DataState.Success -> {
-    //                     // Handle success
-    //                 }
-    //                 is DataState.Error -> {
-    //                     // Handle error
-    //                 }
-    //                 is DataState.Loading -> {
-    //                     // Handle loading
-    //                 }
-    //             }
-    //         }
-    //     }
-    // }
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState
@@ -55,42 +31,22 @@ class HomeViewModel(
         loadFoods()
     }
 
+
     private fun loadFoods() {
-        // Example logic: show loading, then fetch from a repository
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
 
-            // Fake data fetch or call repository:
-            val sampleFoods = listOf(
-                FoodItem(
-                    "1",
-                    "Garlic Butter Shrimp Pasta",
-                    "A delicious pasta dish",
-                    images = listOf("https://www.jessicagavin.com/wp-content/uploads/2015/04/lemon-pepper-shrimp-pasta-in-pan.jpg"),
-                    calories = "400", tags = listOf("Lunch", "Dinner")
-                ),
-                FoodItem(
-                    "2",
-                    "Lemon Herb Chicken Frittucine",
-                    "Creamy and tasty frittucine",
-                    images = listOf("https://www.foodandwine.com/thmb/dRikkr-K7Qf2I5vorfPlQ_l6tcM=/750x0/filters:no_upscale():max_bytes(150000):strip_icc():format(webp)/FAW-recipes-herb-and-lemon-roasted-chicken-hero-c4ba0aec56884683be482c47b1e1df11.jpg"),
-                    tags = listOf("Breakfast", "Dessert"),
-                    calories = "340"
-                ),
-                FoodItem(
-                    "3",
-                    "Egg Fried Rice",
-                    "All loving dish - asian and african",
-                    images = listOf("https://www.vincenzosplate.com/wp-content/uploads/2021/07/610x350-Photo-6_829-How-to-Make-EGG-FRIED-RICE-Approved-by-Uncle-Roger-V1.jpg"),
-                    tags = listOf("Breakfast", "Lunch", "Dinner"),
-                    calories = "540"
-                ),
-            )
-
-            _uiState.value = _uiState.value.copy(
-                foodList = sampleFoods,
-                isLoading = false
-            )
+            foodRepository.getAllFoods()
+                .onStart { _uiState.value = _uiState.value.copy(isLoading = true) }
+                .catch { error ->
+                    _uiState.value = _uiState.value.copy(isLoading = false, errorMessage = error.message ?: "An error occurred")
+                }
+                .collect { foods ->
+                    _uiState.value = _uiState.value.copy(
+                        foodList = foods,
+                        isLoading = false
+                    )
+                }
         }
     }
 
@@ -121,8 +77,7 @@ class HomeViewModel(
         val selectedTag = _uiState.value.selectedTag
 
         val filtered = allFoods.filter { food ->
-            (selectedTag == "All" || food.tags.contains(selectedTag)) &&
-                    food.name.contains(query, ignoreCase = true)
+            (selectedTag == "All" || (!food.tags.isNullOrEmpty() && food.tags.contains(selectedTag)) && food.name!!.contains(query, ignoreCase = true))
         }
 
         _uiState.value = _uiState.value.copy(foodList = filtered)

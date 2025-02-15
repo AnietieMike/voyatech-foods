@@ -36,14 +36,20 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import coil.compose.rememberAsyncImagePainter
 import com.anietie.voyatekassessment.R
+import com.anietie.voyatekassessment.domain.model.Category
 import com.anietie.voyatekassessment.domain.model.FoodItem
+import com.anietie.voyatekassessment.domain.model.Tag
+import com.anietie.voyatekassessment.domain.repository.FoodRepository
 import com.anietie.voyatekassessment.presentation.theme.VoyatekAssessmentTheme
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 
 @Composable
 fun HomeScreen(
@@ -121,13 +127,39 @@ fun HomeScreen(
                     style = MaterialTheme.typography.labelLarge,
                     modifier = Modifier.padding(16.dp)
                 )
-                LazyColumn {
-                    items(uiState.foodList) { food ->
-                        FoodItemCard(
-                            food = food,
-                            onItemClick = { onFoodItemClick(food) },
-                            onLikeClick = { viewModel.addToFavorites(food) }
+                // Display error message or empty state text
+                if (uiState.errorMessage.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "${uiState.errorMessage}\nPlease try again!",
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyLarge
                         )
+                    }
+                } else if (uiState.foodList.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No foods available",
+                            textAlign = TextAlign.Center,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    }
+                } else {
+                    LazyColumn {
+                        items(uiState.foodList) { food ->
+                            FoodItemCard(
+                                food = food,
+                                onItemClick = { onFoodItemClick(food) },
+                                onLikeClick = { viewModel.addToFavorites(food) }
+                            )
+                        }
                     }
                 }
             }
@@ -223,7 +255,7 @@ fun FoodItemCard(
         Column {
             // Image
             val painter = rememberAsyncImagePainter(
-                model = if (food.images.isEmpty()) "" else food.images.first()
+                model = if (food.images.isNullOrEmpty()) "" else food.images.first()
             )
             Image(
                 painter = painter,
@@ -243,7 +275,7 @@ fun FoodItemCard(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = food.name,
+                    text = food.name ?: "",
                     style = MaterialTheme.typography.titleMedium
                 )
                 IconButton(onClick = onLikeClick) {
@@ -256,7 +288,7 @@ fun FoodItemCard(
 
             // Short description
             Text(
-                text = food.description,
+                text = food.description ?: "",
                 style = MaterialTheme.typography.titleSmall,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -269,8 +301,26 @@ fun FoodItemCard(
 @Preview(showBackground = true)
 @Composable
 fun HomeScreenPreview() {
+    val fakeRepository = object : FoodRepository {
+        override fun getAllFoods(): Flow<List<FoodItem>> = flow {
+            emit(
+                listOf(
+                    FoodItem("1", "Pizza", "Delicious cheese pizza", "300", listOf(), listOf("Dinner")),
+                    FoodItem("2", "Burger", "Tasty beef burger", "450", listOf(),  listOf("Lunch"))
+                )
+            )
+        }
+
+        override suspend fun addFood(food: FoodItem) {}
+        override suspend fun removeFood(foodId: String) {}
+        override suspend fun getFoodById(foodId: String): FoodItem? = null
+        override suspend fun updateFood(food: FoodItem) {}
+        override suspend fun getCategories(): List<Category> = emptyList()
+        override suspend fun getTags(): List<Tag> = emptyList()
+    }
+
     VoyatekAssessmentTheme {
-        HomeScreen(HomeViewModel(),
+        HomeScreen(HomeViewModel(foodRepository = fakeRepository),
             onFoodItemClick = { /* navigate or show details */ },
             navController = NavController(LocalContext.current)
         )
