@@ -20,6 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -29,6 +30,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -51,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.rememberAsyncImagePainter
 import com.anietie.voyatekassessment.R
 import com.anietie.voyatekassessment.domain.model.Category
+import com.anietie.voyatekassessment.domain.model.FoodImage
 import com.anietie.voyatekassessment.domain.model.FoodItem
 import com.anietie.voyatekassessment.domain.model.Tag
 import com.anietie.voyatekassessment.domain.repository.FoodRepository
@@ -63,13 +67,15 @@ import kotlinx.coroutines.flow.flow
 @Composable
 fun AddFoodScreen(
     viewModel: AddFoodViewModel,
-    onFoodAdded: (FoodItem) -> Unit,
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit,
 ) {
     val categoryList by viewModel.categoryList.collectAsState()
+    val tagList by viewModel.tagList.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
     val isSuccess by viewModel.foodAdded.collectAsState()
+
+    val snackbarHostState = remember { SnackbarHostState() }
 
     var name by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
@@ -79,17 +85,31 @@ fun AddFoodScreen(
     var tags by remember { mutableStateOf(listOf<String>()) }
     val imageUris = remember { mutableStateListOf<String>() }
 
-    val isFormComplete = name.isNotBlank() && description.isNotBlank() &&
-            calories.isNotBlank() && selectedCategory != null && imageUris.isNotEmpty()
+    val isFormComplete =
+        name.isNotBlank() &&
+            description.isNotBlank() &&
+            calories.isNotBlank() &&
+            selectedCategory != null &&
+            imageUris.isNotEmpty() &&
+            tags.isNotEmpty()
 
     if (isSuccess) {
         LaunchedEffect(Unit) {
-            // Navigate back or show a success message
+            // Navigate back and show a success message
+            snackbarHostState.showSnackbar("Food added successfully!")
             onBackClick()
         }
     }
 
+    if (errorMessage != null) {
+        LaunchedEffect(Unit) {
+            // Navigate back and show a success message
+            snackbarHostState.showSnackbar(errorMessage ?: "An error occurred!")
+        }
+    }
+
     Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("Add new food") },
@@ -97,175 +117,198 @@ fun AddFoodScreen(
                     IconButton(onClick = onBackClick) {
                         Icon(
                             painter = painterResource(id = R.drawable.ic_back),
-                            contentDescription = "Back"
+                            contentDescription = "Back",
                         )
                     }
-                }
+                },
             )
         },
         // 1) Put the Add button in the bottom bar
         bottomBar = {
             Button(
                 onClick = {
-                    val food = FoodItem(
-                        categoryId = selectedCategory?.id.toString(),
-                        name = name,
-                        description = description,
-                        images = imageUris,
-                        tags = tags,
-                        calories = calories
-                    )
+                    val food =
+                        FoodItem(
+                            id = 1,
+                            categoryId = selectedCategory!!.id,
+                            category = selectedCategory!!,
+                            name = name,
+                            description = description,
+                            images =
+                                imageUris.mapIndexed { index, url ->
+                                    FoodImage(id = index, imageUrl = url)
+                                },
+                            tags = tags,
+                            calories = calories,
+                        )
                     viewModel.addFoodItem(food)
                 },
                 shape = RoundedCornerShape(8.dp),
                 enabled = isFormComplete, // Disabled until form is complete
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 22.dp)
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 22.dp),
             ) {
                 Text("Add Food")
             }
-        }
+        },
     ) { paddingValues ->
-        // 2) Make the content scrollable
-        Column(
-            modifier = Modifier
-                .padding(paddingValues)
-                .fillMaxSize()
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState())
-        ) {
-            // Photo Options
-            PhotoOptionsRow(
-                onTakePhotoClick = { uri ->
-                    // Launch camera with URI and store the URI
-                    imageUris.add(uri ?: return@PhotoOptionsRow)
-                },
-                onUploadClick = { uri ->
-                    // Launch gallery
-                    imageUris.add(uri ?: return@PhotoOptionsRow)
+
+        if (isLoading) {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator()
+            }
+        } else {
+            Column(
+                modifier =
+                    Modifier
+                        .padding(paddingValues)
+                        .fillMaxSize()
+                        .padding(16.dp)
+                        .verticalScroll(rememberScrollState()),
+            ) {
+                // Photo Options
+                PhotoOptionsRow(
+                    onTakePhotoClick = { uri ->
+                        // Launch camera with URI and store the URI
+                        imageUris.add(uri ?: return@PhotoOptionsRow)
+                    },
+                    onUploadClick = { uri ->
+                        // Launch gallery
+                        imageUris.add(uri ?: return@PhotoOptionsRow)
+                    },
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Thumbnails / placeholders
+                if (imageUris.isNotEmpty()) {
+                    ImageThumbnailRow(
+                        imageUris = imageUris,
+                        onRemoveImage = { uriToRemove ->
+                            imageUris.remove(uriToRemove)
+                        },
+                    )
                 }
-            )
+                Spacer(modifier = Modifier.height(16.dp))
 
-            Spacer(modifier = Modifier.height(16.dp))
+                // Name
+                Text("Name", style = MaterialTheme.typography.labelLarge)
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    placeholder = {
+                        Text(
+                            "Enter food name",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Color.Gray,
+                        )
+                    },
+                    textStyle = MaterialTheme.typography.labelLarge,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp),
+                )
+                Spacer(modifier = Modifier.height(20.dp))
 
-            // Thumbnails / placeholders
-            if (imageUris.isNotEmpty()) {
-                ImageThumbnailRow(
-                    imageUris = imageUris,
-                    onRemoveImage = { uriToRemove ->
-                        imageUris.remove(uriToRemove)
-                    }
+                // Description
+                Text("Description", style = MaterialTheme.typography.labelLarge)
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    placeholder = { Text("Enter food description", style = MaterialTheme.typography.labelLarge, color = Color.Gray) },
+                    textStyle = MaterialTheme.typography.labelLarge,
+                    minLines = 3,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp),
+                )
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Category Dropdown
+                Text("Category", style = MaterialTheme.typography.labelLarge)
+                CategoryDropdown(
+                    categoryList = categoryList.map { it },
+                    selectedCategory = selectedCategory,
+                    onCategorySelected = { selectedCategory = it },
+                )
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Calories
+                Text("Calories", style = MaterialTheme.typography.labelLarge)
+                OutlinedTextField(
+                    value = calories,
+                    onValueChange = { calories = it },
+                    placeholder = {
+                        Text(
+                            "Enter number of calories",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Color.Gray,
+                        )
+                    },
+                    textStyle = MaterialTheme.typography.labelLarge,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp),
+                )
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Tags
+                Text("Tags", style = MaterialTheme.typography.labelLarge)
+                TagSelectionField(
+                    availableTags = tagList,
+                    selectedTags = tags,
+                    onTagSelectionChanged = { updatedTags ->
+                        tags = updatedTags
+                    },
                 )
             }
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Name
-            Text("Name", style = MaterialTheme.typography.labelLarge)
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                placeholder = {
-                    Text(
-                        "Enter food name",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = Color.Gray
-                    )
-                },
-                textStyle = MaterialTheme.typography.labelLarge,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp)
-            )
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Description
-            Text("Description", style = MaterialTheme.typography.labelLarge)
-            OutlinedTextField(
-                value = description,
-                onValueChange = { description = it },
-                placeholder = { Text("Enter food description", style = MaterialTheme.typography.labelLarge, color = Color.Gray) },
-                textStyle = MaterialTheme.typography.labelLarge,
-                minLines = 3,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp)
-            )
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Category Dropdown
-            Text("Category", style = MaterialTheme.typography.labelLarge)
-            CategoryDropdown(
-                categoryList = categoryList.map { it },
-                selectedCategory = selectedCategory,
-                onCategorySelected = { selectedCategory = it }
-            )
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Calories
-            Text("Calories", style = MaterialTheme.typography.labelLarge)
-            OutlinedTextField(
-                value = calories,
-                onValueChange = { calories = it },
-                placeholder = {
-                    Text(
-                        "Enter number of calories",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = Color.Gray
-                    )
-                },
-                textStyle = MaterialTheme.typography.labelLarge,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp)
-            )
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Tags
-            Text("Tags", style = MaterialTheme.typography.labelLarge)
-            TagInputField(
-                tags = tags,
-                onTagsChanged = { updatedTags ->
-                    tags = updatedTags
-                }
-            )
-            Text("Press enter once you've typed a tag", style = MaterialTheme.typography.labelLarge, color = Color.Gray)
         }
     }
 }
 
-
 @Composable
 fun PhotoOptionsRow(
     onTakePhotoClick: (String?) -> Unit,
-    onUploadClick: (String?) -> Unit
+    onUploadClick: (String?) -> Unit,
 ) {
-
     val context = LocalContext.current
     // We store the URI for camera
     val cameraUri = remember { mutableStateOf<Uri?>(null) }
 
     // TakePicture launcher
-    val takePictureLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicture()
-    ) { success ->
-        if (success) {
-            onTakePhotoClick(cameraUri.value?.toString())
-        } else {
-            onTakePhotoClick(null)
+    val takePictureLauncher =
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.TakePicture(),
+        ) { success ->
+            if (success) {
+                onTakePhotoClick(cameraUri.value?.toString())
+            } else {
+                onTakePhotoClick(null)
+            }
         }
-    }
 
     // Gallery launcher
-    val pickImageLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        onUploadClick(uri?.toString())
-    }
+    val pickImageLauncher =
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.GetContent(),
+        ) { uri: Uri? ->
+            onUploadClick(uri?.toString())
+        }
 
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         IconTextCard(
             iconPainter = painterResource(id = R.drawable.ic_camera),
@@ -278,7 +321,7 @@ fun PhotoOptionsRow(
                     takePictureLauncher.launch(newUri)
                 }
             },
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
         )
         IconTextCard(
             iconPainter = painterResource(id = R.drawable.ic_upload),
@@ -287,7 +330,7 @@ fun PhotoOptionsRow(
                 // Launch gallery
                 pickImageLauncher.launch("image/*")
             },
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
         )
     }
 }
@@ -297,13 +340,13 @@ fun PhotoOptionsRow(
 fun CategoryDropdown(
     categoryList: List<Category>,
     selectedCategory: Category?,
-    onCategorySelected: (Category) -> Unit
+    onCategorySelected: (Category) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
 
     ExposedDropdownMenuBox(
         expanded = expanded,
-        onExpandedChange = { expanded = !expanded }
+        onExpandedChange = { expanded = !expanded },
     ) {
         OutlinedTextField(
             value = selectedCategory?.name ?: "",
@@ -311,17 +354,18 @@ fun CategoryDropdown(
             readOnly = true,
             trailingIcon = {
                 ExposedDropdownMenuDefaults.TrailingIcon(
-                    expanded = expanded
+                    expanded = expanded,
                 )
             },
-            modifier = Modifier
-                .menuAnchor()
-                .fillMaxWidth()
-                .padding(top = 8.dp)
+            modifier =
+                Modifier
+                    .menuAnchor()
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
         )
         ExposedDropdownMenu(
             expanded = expanded,
-            onDismissRequest = { expanded = false }
+            onDismissRequest = { expanded = false },
         ) {
             categoryList.forEach { category ->
                 DropdownMenuItem(
@@ -329,7 +373,7 @@ fun CategoryDropdown(
                     onClick = {
                         onCategorySelected(category)
                         expanded = false
-                    }
+                    },
                 )
             }
         }
@@ -339,45 +383,49 @@ fun CategoryDropdown(
 @Composable
 fun ImageThumbnailRow(
     imageUris: List<String>,
-    onRemoveImage: (String) -> Unit
+    onRemoveImage: (String) -> Unit,
 ) {
     // Horizontal row of images with spacing
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         imageUris.forEach { uri ->
             Box(
-                modifier = Modifier
-                    .size(80.dp) // Increase from 64.dp if you want a bigger thumbnail
+                modifier =
+                    Modifier
+                        .size(80.dp), // Increase from 64.dp if you want a bigger thumbnail
             ) {
                 // 1) The image itself
                 Image(
                     painter = rememberAsyncImagePainter(uri),
                     contentDescription = null,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(RoundedCornerShape(8.dp)), // Rounded corners
-                    contentScale = ContentScale.Crop
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(8.dp)),
+                    // Rounded corners
+                    contentScale = ContentScale.Crop,
                 )
 
                 // 2) The "X" button in the bottom-right corner
                 Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 4.dp, bottom = 4.dp) // small offset from edge
-                        .size(24.dp)
-                        .background(color = Color.White, shape = RoundedCornerShape(12.dp))
-                        .clickable {
-                            onRemoveImage(uri)
-                        },
-                    contentAlignment = Alignment.Center
+                    modifier =
+                        Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(end = 4.dp, bottom = 4.dp) // small offset from edge
+                            .size(24.dp)
+                            .background(color = Color.White, shape = RoundedCornerShape(12.dp))
+                            .clickable {
+                                onRemoveImage(uri)
+                            },
+                    contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         painter = painterResource(id = R.drawable.ic_close), // or Icons.Default.Close
                         contentDescription = "Remove image",
                         tint = Color.Black, // Adjust color if needed
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(16.dp),
                     )
                 }
             }
@@ -385,34 +433,72 @@ fun ImageThumbnailRow(
     }
 }
 
-
 @Preview(showBackground = true)
 @Composable
 fun AddFoodScreenPreview() {
-    val fakeRepository = object : FoodRepository {
-        override fun getAllFoods(): Flow<List<FoodItem>> = flow {
-            emit(
-                listOf(
-                    FoodItem("1", "Pizza", "Delicious cheese pizza", "300", listOf(), listOf("Dinner")),
-                    FoodItem("2", "Burger", "Tasty beef burger", "450", listOf(),  listOf("Lunch"))
+    val fakeRepository =
+        object : FoodRepository {
+            override fun getAllFoods(): Flow<List<FoodItem>> =
+                flow {
+                    emit(
+                        listOf(
+                            FoodItem(
+                                id = 1,
+                                name = "Spicy Beef Suya",
+                                description = "A popular West African street food consisting of thinly sliced beef skewers coated in a spicy, nutty suya spice mix.",
+                                categoryId = 8,
+                                calories = "213",
+                                tags = listOf("Spicy", "Grilled", "High-Protein"),
+                                images =
+                                    listOf(
+                                        FoodImage(id = 1, imageUrl = "https://example.com/images/suya1.jpg"),
+                                        FoodImage(id = 2, imageUrl = "https://example.com/images/suya2.jpg"),
+                                    ),
+                                category =
+                                    Category(
+                                        id = 8,
+                                        name = "Meat",
+                                        description = "Beef, pork, and other meats",
+                                    ),
+                            ),
+                        ),
+                    )
+                }
+
+            override suspend fun addFood(
+                name: String,
+                description: String,
+                categoryId: Int,
+                calories: Int,
+                tags: List<Int>,
+                imagePaths: List<String>,
+            ): FoodItem =
+                FoodItem(
+                    1,
+                    categoryId,
+                    Category("Meat", 1, "Beef, pork, and other meats"),
+                    name,
+                    description,
+                    calories.toString(),
+                    imagePaths.map {
+                        FoodImage(1, it)
+                    },
+                    tags.map { it.toString() },
                 )
-            )
+
+            override suspend fun removeFood(foodId: String) {}
+
+            override suspend fun updateFood(food: FoodItem) {}
+
+            override suspend fun getCategories(): List<Category> = emptyList()
+
+            override suspend fun getTags(): List<Tag> = emptyList()
         }
 
-        override suspend fun addFood(food: FoodItem) {}
-        override suspend fun removeFood(foodId: String) {}
-        override suspend fun getFoodById(foodId: String): FoodItem? = null
-        override suspend fun updateFood(food: FoodItem) {}
-        override suspend fun getCategories(): List<Category> = emptyList()
-        override suspend fun getTags(): List<Tag> = emptyList()
-    }
     VoyatekAssessmentTheme {
         AddFoodScreen(
-            AddFoodViewModel(fakeRepository),
-            onFoodAdded = { /* navigate or show details */ },
-            onBackClick = { /* navigate back */ }
+            AddFoodViewModel(fakeRepository, LocalContext.current),
+            onBackClick = { /* navigate back */ },
         )
     }
 }
-
-

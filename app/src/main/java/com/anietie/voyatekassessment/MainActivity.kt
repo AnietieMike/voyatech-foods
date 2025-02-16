@@ -20,7 +20,8 @@ import retrofit2.converter.gson.GsonConverterFactory
 
 class MainActivity : ComponentActivity() {
     private val foodApi by lazy {
-        Retrofit.Builder()
+        Retrofit
+            .Builder()
             .baseUrl("https://assessment.vgtechdemo.com/api/")
             .addConverterFactory(GsonConverterFactory.create())
             .build()
@@ -36,7 +37,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private val addFoodViewModel by lazy {
-        AddFoodViewModel(repository = repository)
+        AddFoodViewModel(repository = repository, appContext = this)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -48,7 +49,7 @@ class MainActivity : ComponentActivity() {
                 AppNavigation(
                     navController = navController,
                     homeViewModel = homeViewModel,
-                    addFoodViewModel = addFoodViewModel
+                    addFoodViewModel = addFoodViewModel,
                 )
             }
         }
@@ -56,10 +57,13 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
+fun Greeting(
+    name: String,
+    modifier: Modifier = Modifier,
+) {
     Text(
         text = "Hello $name!",
-        modifier = modifier
+        modifier = modifier,
     )
 }
 

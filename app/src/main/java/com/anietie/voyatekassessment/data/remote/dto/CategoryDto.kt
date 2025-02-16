@@ -8,13 +8,12 @@ data class CategoryDto(
     val id: Int,
     val name: String,
     @SerializedName("created_at") val createdAt: String,
-    @SerializedName("updated_at") val updatedAt: String
+    @SerializedName("updated_at") val updatedAt: String,
 ) {
-    fun toDomain(): Category {
-         return Category(
+    fun toDomain(): Category =
+        Category(
             description = description,
             id = id,
-            name = name
+            name = name,
         )
-    }
 }

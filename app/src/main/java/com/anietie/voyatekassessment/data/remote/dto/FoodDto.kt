@@ -1,23 +1,30 @@
 package com.anietie.voyatekassessment.data.remote.dto
 
+import com.anietie.voyatekassessment.domain.model.FoodImage
 import com.anietie.voyatekassessment.domain.model.FoodItem
+import com.google.gson.annotations.SerializedName
 
 data class FoodDto(
-    val categoryId: String,
+    val id: Int,
     val name: String,
     val description: String,
-    val calories: String,
-    val images: List<String> = emptyList(),
-    val tags: List<String> = emptyList()
+    @SerializedName("category_id") val categoryId: Int,
+    val calories: Int,
+    @SerializedName("created_at") val createdAt: String,
+    @SerializedName("updated_at") val updatedAt: String,
+    val foodTags: List<String>,
+    val foodImages: List<FoodImage>,
+    val category: CategoryDto,
 ) {
-    fun toDomain(): FoodItem {
-        return FoodItem(
-            categoryId = categoryId,
+    fun toDomain(): FoodItem =
+        FoodItem(
+            id = id,
             name = name,
             description = description,
-            calories = calories,
-            images = images,
-            tags = tags
+            categoryId = categoryId,
+            calories = calories.toString(),
+            images = foodImages,
+            tags = foodTags,
+            category = category.toDomain(),
         )
-    }
 }

@@ -7,10 +7,21 @@ import kotlinx.coroutines.flow.Flow
 
 interface FoodRepository {
     fun getAllFoods(): Flow<List<FoodItem>>
-    suspend fun addFood(food: FoodItem)
+
+    suspend fun addFood(
+        name: String,
+        description: String,
+        categoryId: Int,
+        calories: Int,
+        tags: List<Int>,
+        imagePaths: List<String>,
+    ): FoodItem
+
     suspend fun removeFood(foodId: String)
-    suspend fun getFoodById(foodId: String): FoodItem?
+
     suspend fun updateFood(food: FoodItem)
+
     suspend fun getCategories(): List<Category>
+
     suspend fun getTags(): List<Tag>
 }

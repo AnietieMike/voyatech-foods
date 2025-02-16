@@ -1,10 +1,12 @@
 package com.anietie.voyatekassessment.domain.model
 
 data class FoodItem(
-    val categoryId: String? = null,
-    val name: String?,
-    val description: String?,
+    val id: Int,
+    val categoryId: Int,
+    val category: Category,
+    val name: String,
+    val description: String,
     val calories: String?,
-    val images: List<String>? = emptyList(),
-    val tags: List<String>? = emptyList()
+    val images: List<FoodImage>? = emptyList(),
+    val tags: List<String>? = emptyList(),
 )
